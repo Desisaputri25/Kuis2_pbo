@@ -53,20 +53,42 @@ public class SistemToko implements Serializable {
         }
 
         String[] daftarRecord = isi.toString().trim().split("\\s+");
-        int nomor = 0;
+
+        String formatBaris = "%-3s %-9s %-13s %-12s %-4s %s%n";
+        System.out.printf(formatBaris, "No", "Status", "ID Pelanggan", "Kode Produk", "Jml", "Keterangan");
+        System.out.printf(formatBaris, "--", "--------", "------------", "-----------", "---", "----------");
+
+        int nomor = 0, berhasil = 0, gagal = 0;
         for (String record : daftarRecord) {
             if (record.isEmpty()) continue;
             nomor++;
+            String id = "-", kd = "-", jml = "-";
             try {
-                prosesRecord(record);
-                System.out.println("[OK] Transaksi #" + nomor + " berhasil: " + record);
+                HashMap<String, String> data = parseRecord(record);
+                id = data.get("ID");
+                kd = data.get("KD");
+                jml = data.get("JML");
+                Transaksi t = prosesData(data);
+                berhasil++;
+                System.out.printf(formatBaris, nomor, "BERHASIL", id, kd, jml,
+                    "Stok " + kd + " tersisa " + t.getProduk().getStok());
             } catch (TokoException e) {
-                System.out.println("[GAGAL] Transaksi #" + nomor + " (" + record + "): " + e.getMessage());
+                gagal++;
+                System.out.printf(formatBaris, nomor, "GAGAL", id, kd, jml, e.getMessage());
             }
         }
+
+        System.out.println();
+        System.out.println("Ringkasan: " + nomor + " transaksi | " + berhasil + " berhasil | " + gagal + " gagal");
+        System.out.println();
+        System.out.println("Sisa stok akhir:");
+        for (Produk p : daftarProduk) {
+            System.out.printf("  %-7s %-18s %d%n", p.getKode(), p.getNama(), p.getStok());
+        }
+        System.out.println();
     }
 
-    private void prosesRecord(String record) throws TokoException {
+    private HashMap<String, String> parseRecord(String record) throws FormatDataException {
         HashMap<String, String> data = new HashMap<>();
         for (String bagian : record.split(",")) {
             if (bagian.isEmpty()) continue;
@@ -76,11 +98,13 @@ public class SistemToko implements Serializable {
             }
             data.put(kv[0].trim(), kv[1].trim());
         }
-
         if (!data.containsKey("ID") || !data.containsKey("KD") || !data.containsKey("JML")) {
             throw new FormatDataException("Field ID/KD/JML tidak lengkap");
         }
+        return data;
+    }
 
+    private Transaksi prosesData(HashMap<String, String> data) throws TokoException {
         int jumlah;
         try {
             jumlah = Integer.parseInt(data.get("JML"));
@@ -94,10 +118,11 @@ public class SistemToko implements Serializable {
         Pelanggan pelanggan = cariPelanggan(data.get("ID"));
         Produk produk = cariProduk(data.get("KD"));
 
-        produk.kurangiStok(jumlah);   
+        produk.kurangiStok(jumlah);
         Transaksi t = new Transaksi(pelanggan, produk, jumlah);
         pelanggan.tambahBelanja(t.getTotal());
         logTransaksi.add(t);
+        return t;
     }
 
     public void simpanLaporanAkhir() {
